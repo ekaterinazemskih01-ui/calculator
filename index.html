@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com;">
   <title>Хейхэ Дент — Калькулятор лечения</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -231,7 +229,7 @@
   <span class="total-amount" id="fixedTotal">0 ₽</span>
   <div>
     <button id="resetBtn">Сбросить всё</button>
-    <button id="exportPdfBtn" class="btn-export">📄 Сохранить как PDF</button>
+    <button id="printBtn" class="btn-export">🖨️ Открыть план лечения (печать/PDF)</button>
   </div>
 </div>
 
@@ -342,7 +340,16 @@
     updatePriceDisplay();
   }
 
-  function generatePdfHtml() {
+  // Функция определения цвета для страны
+  function getCountryColor(countryName) {
+    if (countryName.includes('Китай')) return '#1a7f4e';
+    if (countryName.includes('Япония')) return '#c44536';
+    if (countryName.includes('Германия')) return '#2c6e9e';
+    if (countryName.includes('Корея')) return '#b8860b';
+    return 'black';
+  }
+
+  function generatePrintHtml() {
     let patientName = document.getElementById('patientName').value || '_________________';
     let patientAge = document.getElementById('patientAge').value || '___';
     let patientPhone = document.getElementById('patientPhone').value || '_________________';
@@ -375,137 +382,254 @@
     otherCosts += (parseInt(document.getElementById('hygieneQty').value)||0)*4000;
     otherCosts += (parseInt(document.getElementById('whiteningQty').value)||0)*12000;
 
+    // Список материалов с цветами
     const variants = [
-      { name:"Титан (Китай)", price:3000 }, { name:"Титан (Япония)", price:3200 },
-      { name:"Титан (Германия)", price:3600 }, { name:"Титан (Корея)", price:4000 },
-      { name:"Co-Cr (Китай)", price:4200 }, { name:"Co-Cr (Япония)", price:4800 },
-      { name:"Co-Cr (Германия)", price:5600 }, { name:"Co-Cr (Корея)", price:6800 },
-      { name:"Цирконий бюджет (Китай)", price:8900 }, { name:"Цирконий бюджет (Япония)", price:9800 },
-      { name:"Цирконий бюджет (Германия)", price:10080 }, { name:"Цирконий бюджет (Корея)", price:11000 },
-      { name:"Цирконий премиум (Китай)", price:12000 }, { name:"Цирконий премиум (Япония)", price:13000 },
-      { name:"Цирконий премиум (Германия)", price:15000 }, { name:"Цирконий премиум (Корея)", price:18000 }
+      { name:"Титан (Китай)", price:3000, country:"Китай" }, { name:"Титан (Япония)", price:3200, country:"Япония" },
+      { name:"Титан (Германия)", price:3600, country:"Германия" }, { name:"Титан (Корея)", price:4000, country:"Корея" },
+      { name:"Co-Cr (Китай)", price:4200, country:"Китай" }, { name:"Co-Cr (Япония)", price:4800, country:"Япония" },
+      { name:"Co-Cr (Германия)", price:5600, country:"Германия" }, { name:"Co-Cr (Корея)", price:6800, country:"Корея" },
+      { name:"Цирконий бюджет (Китай)", price:8900, country:"Китай" }, { name:"Цирконий бюджет (Япония)", price:9800, country:"Япония" },
+      { name:"Цирконий бюджет (Германия)", price:10080, country:"Германия" }, { name:"Цирконий бюджет (Корея)", price:11000, country:"Корея" },
+      { name:"Цирконий премиум (Китай)", price:12000, country:"Китай" }, { name:"Цирконий премиум (Япония)", price:13000, country:"Япония" },
+      { name:"Цирконий премиум (Германия)", price:15000, country:"Германия" }, { name:"Цирконий премиум (Корея)", price:18000, country:"Корея" }
     ];
     let variantsHtml = '';
     for(let v of variants) {
       let crownCost = crownsQty * v.price;
       let total = crownCost + removableCost + otherCosts;
-      variantsHtml += `<tr><td style="font-weight:bold;">${v.name}</td><td style="text-align:center">${crownsQty}</td><td style="text-align:right">${v.price.toLocaleString('ru-RU')} ₽</td><td style="text-align:right">${crownCost.toLocaleString('ru-RU')} ₽</td><td style="text-align:right"><strong>${total.toLocaleString('ru-RU')} ₽</strong></td></tr>`;
+      const color = getCountryColor(v.country);
+      variantsHtml += `<tr><td style="color:${color}; font-weight:bold;">${v.name}</td><td style="text-align:center">${crownsQty}</td><td style="text-align:right">${v.price.toLocaleString('ru-RU')} ₽</td><td style="text-align:right">${crownCost.toLocaleString('ru-RU')} ₽</td><td style="text-align:right"><strong>${total.toLocaleString('ru-RU')} ₽</strong></tr>`;
     }
-    let additionalRow = '';
-    if(removableQty>0 || isImplantSelected()) {
-      let services=[];
-      if(removableQty>0) services.push(`Съёмный протез: ${removableName} (${removableQty} шт)`);
-      if(isImplantSelected()) services.push('Имплантация (выбрана)');
-      additionalRow = `<p><strong>Дополнительные услуги:</strong> ${services.join('; ')}</p>`;
+
+    let additionalServicesList = [];
+    if (removableQty > 0) {
+      additionalServicesList.push(`Съёмный протез: ${removableName} (${removableQty} шт) — ${removableCost.toLocaleString('ru-RU')} ₽`);
     }
-    const additionalInfo = `
-      <div style="margin-top: 30px;">
-        <h3>📌 Общее заключение</h3>
-        <p>По приезду необходим рентген-снимок для исключения воспалений или кист в корневой зоне. При выявлении болезней назначается соответствующее лечение.</p>
-        <h3>🦷 Материалы для протезирования</h3>
-        <p><strong>Кобальт-хромовый сплав</strong> — высокая прочность, доступная стоимость, долговечность 12–15 лет.<br>
-        <strong>Диоксид циркония</strong> — биосовместимость, эстетика, срок службы до 30 лет. Бюджетный и премиум класс.</p>
-        <h3>🔩 Имплантация</h3>
-        <p>Osstem, Dentium, All-on-4/6 — быстрое восстановление жевательной функции, часто без костной пластики.</p>
-        <h3>🦷 Съёмные протезы</h3>
-        <p>Acry-Free — гипоаллергенный, гибкий, не окрашивается, без металлических крючков.</p>
-        <h3>🎨 Выбор оттенка зубов</h3>
-        <ul><li>Соответствие цвету соседних зубов</li><li>Соответствие цвету кожи и волос</li><li>Учёт возраста</li></ul>
-        <h3>📅 Этапы лечения</h3>
-        <ul><li>День 1: консультация, рентген, подготовка, снятие слепков</li><li>Дни 2–4: примерка, фиксация</li><li>Дни 5–6: установка готовых конструкций, рекомендации</li></ul>
-        <h3>💰 Оплата и гарантия</h3>
-        <p>Оплата рублями наличными или переводом. Выдаётся именная гарантийная карта. Рентген и препарирование — без оплаты.</p>
+    if (isImplantSelected()) {
+      additionalServicesList.push(`Имплантация (выбрана) — стоимость включена в общую сумму`);
+    }
+    let additionalRow = additionalServicesList.length ? `<p><strong>Дополнительные услуги:</strong> ${additionalServicesList.join('; ')}</p>` : '';
+
+    // Блок сопутствующих услуг (рентген, анестезия, лечение, удаление, инфузионная терапия)
+    const paymentInfoBlock = `
+      <div style="margin-top: 20px; margin-bottom: 20px; padding: 12px; background: #f9f9f9; border-left: 4px solid #2c6e4e;">
+        <h3>📋 СОПУТСТВУЮЩИЕ УСЛУГИ И ОПЛАТА</h3>
+        <ul style="margin-left: 1.2rem; list-style-type: disc;">
+          <li>Рентген снимок: <strong>без оплаты</strong></li>
+          <li>Анестезия: <strong>без оплаты</strong></li>
+          <li>Препарирование (обточка): <strong>без оплаты</strong></li>
+          <li>Лечение: от <strong>1 000 ₽</strong></li>
+          <li>Удаление: от <strong>3 000 ₽</strong></li>
+          <li>Удаление зуба мудрости: от <strong>3 000</strong> до <strong>15 000 ₽</strong></li>
+          <li>Инфузионная терапия (капельницы) после удаления или имплантации — 3‑дневный курс: <strong>360 юаней</strong> (расчёт по текущему курсу)</li>
+        </ul>
+        <p style="margin-top: 8px;">* Окончательная стоимость согласовывается после очного осмотра.</p>
       </div>
     `;
+
+    const headerBlock = `
+      <div class="header">
+        <div class="clinic-name">ХЕЙХЕ ДЕНТ @heihe_dent</div>
+        <div class="contacts">«Обрети улыбку за ОДНУ поездку!» Стоматологические туры в Китай<br>
+        Тел: +7 (914) 227-09-25, +7 (914) 278-08-26, +7 (924) 164-54-68 (MAX, WhatsApp, Telegram)<br>
+        Email: heihe_dent@mail.ru | Сайт: https://heihe-prodent.ru/ | YouTube: <a href="https://youtube.com/@heihe_dent">https://youtube.com/@heihe_dent</a></div>
+      </div>
+    `;
+
+    // Полный HTML для печати (без водяного знака, с восстановленными разделами)
     return `<!DOCTYPE html>
     <html>
     <head><meta charset="UTF-8"><title>План лечения Хейхэ Дент</title>
     <style>
-      body { font-family: 'Times New Roman', Arial, sans-serif; margin: 2rem; font-size: 12pt; background: white; line-height: 1.4; }
-      .header { text-align: center; border-bottom: 2px solid #1e4663; padding-bottom: 1rem; margin-bottom: 1.5rem; }
-      .clinic-name { font-size: 1.8rem; font-weight: bold; color: #1e4663; }
-      .contacts { font-size: 0.9rem; color: #555; }
-      h2 { color: #1e4663; margin-top: 1.5rem; }
-      h3 { color: #2c6e4e; margin-top: 1.2rem; margin-bottom: 0.5rem; }
-      table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-      th, td { border: 1px solid #9bb7d0; padding: 8px 12px; vertical-align: top; }
-      th { background: #eef2fa; }
-      .signature { margin-top: 2rem; border-top: 1px solid #aaa; padding-top: 1rem; }
-      .patient-photo img { max-width: 150px; border-radius: 1rem; border: 1px solid #ddd; }
-      .extra-images img { max-width: 280px; display: inline-block; margin-right: 10px; margin-bottom: 10px; border: 1px solid #ccc; }
-      ul, ol { margin-left: 1.5rem; margin-bottom: 0.8rem; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: 'Times New Roman', Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        font-size: 12pt;
+        background: white;
+        line-height: 1.4;
+      }
+      @page {
+        margin: 1cm;
+        size: A4;
+      }
+      html, body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .header {
+        text-align: center;
+        border-bottom: 2px solid #1e4663;
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+      }
+      .clinic-name {
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: #1e4663;
+      }
+      .contacts {
+        font-size: 0.9rem;
+        color: #555;
+      }
+      .footer-header {
+        margin-top: 2rem;
+        border-top: 2px solid #1e4663;
+        padding-top: 1rem;
+        text-align: center;
+      }
+      h2 {
+        color: #1e4663;
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+        font-size: 1.5rem;
+      }
+      h3 {
+        color: #2c6e4e;
+        margin-top: 1.2rem;
+        margin-bottom: 0.5rem;
+        font-size: 1.2rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+        font-size: 11pt;
+      }
+      th, td {
+        border: 1px solid #9bb7d0;
+        padding: 8px 12px;
+        vertical-align: top;
+      }
+      th {
+        background: #eef2fa;
+      }
+      .signature {
+        margin-top: 2rem;
+        border-top: 1px solid #aaa;
+        padding-top: 1rem;
+      }
+      .patient-photo {
+        margin-top: 10px;
+        text-align: left;
+      }
+      .patient-photo img {
+        max-width: 150px;
+        border-radius: 1rem;
+        border: 1px solid #ddd;
+      }
+      .extra-images img {
+        max-width: 280px;
+        display: inline-block;
+        margin-right: 10px;
+        margin-bottom: 10px;
+        border: 1px solid #ccc;
+      }
+      ul, ol {
+        margin-left: 1.5rem;
+        margin-bottom: 0.8rem;
+      }
     </style>
     </head>
     <body>
-      <div class="header">
-        <div class="clinic-name">ХЕЙХЕ ДЕНТ @heihe_dent</div>
-        <div class="contacts">«Обрети улыбку за ОДНУ поездку!» Стоматологические туры в Китай<br>
-        Тел: +7 (914) 227-09-25, +7 (914) 278-08-26, +7 (924) 164-54-68<br>
-        Email: heihe_dent@mail.ru | Сайт: https://heihe-prodent.ru/</div>
-      </div>
+      ${headerBlock}
       <h2>ПЛАН ЛЕЧЕНИЯ И СТОИМОСТЬ</h2>
-      <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:20px;">
-        <div><p><strong>Пациент:</strong> ${patientName}<br><strong>Возраст:</strong> ${patientAge}<br><strong>Телефон:</strong> ${patientPhone}<br><strong>Дата составления:</strong> ${new Date().toLocaleDateString('ru-RU')}</p></div>
+      <div>
+        <p><strong>Пациент:</strong> ${patientName}<br><strong>Возраст:</strong> ${patientAge}<br><strong>Телефон:</strong> ${patientPhone}<br><strong>Дата составления:</strong> ${new Date().toLocaleDateString('ru-RU')}</p>
         <div class="patient-photo">${photoDataUrl ? `<img src="${photoDataUrl}" alt="Фото пациента">` : ''}</div>
       </div>
-      <div class="extra-images">${extra1DataUrl ? `<img src="${extra1DataUrl}" alt="Доп. изображение 1">` : ''}${extra2DataUrl ? `<img src="${extra2DataUrl}" alt="Доп. изображение 2">` : ''}</div>
+      <div class="extra-images">${extra1DataUrl ? `<img src="${extra1DataUrl}" alt="Рентген/схема">` : ''}${extra2DataUrl ? `<img src="${extra2DataUrl}" alt="Рентген/схема">` : ''}</div>
+      
       <p><strong>Количество коронок:</strong> ${crownsQty}</p>
       <p><strong>Выбранный материал:</strong> ${getSelectedCrownName()} — ${getSelectedCrownPriceForDisplay().toLocaleString('ru-RU')} ₽/шт</p>
       ${additionalRow}
+      
       <h3>РАСЧЁТ ПО ВСЕМ ВАРИАНТАМ МАТЕРИАЛОВ</h3>
-      <table><thead><tr><th>Материал</th><th>Кол-во</th><th>Цена за ед.</th><th>Стоимость коронок</th><th>ОБЩАЯ СТОИМОСТЬ</th></tr></thead><tbody>${variantsHtml}</tbody></table>
-      ${additionalInfo}
+      <table>
+        <thead><tr><th>Материал коронок</th><th>Кол-во</th><th>Цена за ед.</th><th>Стоимость коронок</th><th>ОБЩАЯ СТОИМОСТЬ</th></tr></thead>
+        <tbody>${variantsHtml}</tbody>
+      </table>
+      
+      ${paymentInfoBlock}
+      
+      <h3>ОБЩЕЕ ЗАКЛЮЧЕНИЕ</h3>
+      <p>По приезду необходимо сдать рентген снимок для исключения воспалений или наличия кист в корневой зоне зубов. При выявлении болезней назначить соответствующее лечение. Снимок так же покажет возможность имплантации. Для имплантации требуется дополнительный осмотр хирурга.</p>
+      
+      <h3>ВИДЫ МАТЕРИАЛОВ ДЛЯ ПРОТЕЗИРОВАНИЯ</h3>
+      <p>Выбор материала для зубных коронок зависит от расположения зуба, эстетических требований, состояния прикуса, аллергий, бюджета и длительности службы.</p>
+      
+      <h3>КОБАЛЬТ-ХРОМОВЫЙ СПЛАВ + ФАРФОРОВОЕ НАПЫЛЕНИЕ</h3>
+      <p>Кобальт-хромовый сплав — медицинский металл, устойчивый к коррозии, высокой прочности. Применяется для металлокерамических коронок и мостов.</p>
+      <ul><li>Высокая прочность и износостойкость</li><li>Доступная стоимость</li><li>Биосовместимость - минимальный риск аллергии</li><li>Долговечность 12–15 лет</li></ul>
+      
+      <h3>ДИОКСИД ЦИРКОНИЯ (ZrO₂) — ЛЮКС СРЕДИ МАТЕРИАЛОВ</h3>
+      <p>Предлагаем 8 видов коронок на основе диоксида циркония:</p>
+      <ul><li>4 вида БЮДЖЕТНОГО КЛАССА (Китай, Япония, Германия, Корея) — гарантия 12–20 лет</li>
+      <li>4 вида ПРЕМИУМ КЛАССА (Китай, Япония, Германия, Корея) — повышенная прозрачность, прочность, гарантия 25–30 лет</li></ul>
+      <p><strong>Преимущества:</strong> высокая биосовместимость, механическая прочность, эстетика, долговечность (до 30 лет).</p>
+      
+      <h3>ИМПЛАНТАЦИЯ (под ключ с коронкой)</h3>
+      <p><strong>Osstem</strong> (Корея) — титан Grade 4/5, обработка SA, приживаемость >97%<br>
+      <strong>Dentium</strong> (Корея) — титан Grade 4, обработка SLA, сертифицирован FDA<br>
+      <strong>All-on-4 / All-on-6</strong> — установка 4 или 6 имплантов с немедленной фиксацией протеза, часто без костной пластики.</p>
+      <p>Имплантация проводится в 2 этапа с разницей 5–7 месяцев.</p>
+      
+      <h3>СЪЁМНЫЕ ПРОТЕЗЫ</h3>
+      <p><strong>Acry-Free</strong> — термопластичный гипоаллергенный материал, не содержит метилметакрилата, гибкий, не ломается, не окрашивается, без металлических крючков.</p>
+      <p>Другие варианты: акриловые, бюгельные, нейлоновые протезы (цена от 8 000 до 90 000 ₽).</p>
+      
+      <h3>ВЫБОР ОТТЕНКА ЗУБОВ</h3>
+      <ul><li>Соответствие цвету соседних зубов</li><li>Соответствие цвету кожи и волос (светлая кожа – светлые оттенки, тёмная – тёплые тона)</li><li>Учёт возраста (молодым – светлее, взрослым – теплее)</li><li>Индивидуальный фенотип</li></ul>
+      
+      <h3>ЭТАПЫ ЛЕЧЕНИЯ</h3>
+      <ul><li><strong>День 1:</strong> Консультация, 3D-рентген, подготовка полости рта, удаление/санация, снятие слепков</li>
+      <li><strong>Дни 2–4:</strong> Примерка протезов/коронок, фиксация на временную основу, продолжение лечения</li>
+      <li><strong>Дни 5–6:</strong> Установка готовых конструкций на постоянную основу, финальная консультация, рекомендации</li></ul>
+      
+      <h3>ОПЛАТА И ГАРАНТИЯ</h3>
+      <p>Оплата производится рублями наличными или переводом (банк может снять комиссию). По окончании лечения выдаётся именная гарантийная карта с указанием материала и срока гарантии.</p>
+      
       <div class="signature">Врач-стоматолог / Координатор «Хейхэ Дент»<br>М.П.</div>
-      <p style="font-size:0.7rem;">Документ сформирован автоматически. Окончательная стоимость уточняется после очного осмотра.</p>
+      <p style="font-size:0.7rem; margin-top: 10px;">Документ сформирован автоматически. Окончательная стоимость уточняется после очного осмотра.</p>
+      
+      <div class="footer-header">
+        <div class="clinic-name">ХЕЙХЕ ДЕНТ @heihe_dent</div>
+        <div class="contacts">«Обрети улыбку за ОДНУ поездку!» Стоматологические туры в Китай<br>
+        Тел: +7 (914) 227-09-25, +7 (914) 278-08-26, +7 (924) 164-54-68 (MAX, WhatsApp, Telegram)<br>
+        Email: heihe_dent@mail.ru | Сайт: https://heihe-prodent.ru/ | YouTube: <a href="https://youtube.com/@heihe_dent">https://youtube.com/@heihe_dent</a></div>
+      </div>
     </body>
     </html>`;
   }
 
-  async function exportToPdf() {
-    const btn = document.getElementById('exportPdfBtn');
+  async function openPrintWindow() {
+    const btn = document.getElementById('printBtn');
     const originalText = btn.textContent;
     btn.disabled = true;
-    btn.textContent = '⏳ Создание PDF...';
-    
-    // Создаём временный контейнер в теле документа (визуально прозрачный, но в потоке)
-    const tempDiv = document.createElement('div');
-    tempDiv.style.position = 'absolute';
-    tempDiv.style.top = '0';
-    tempDiv.style.left = '0';
-    tempDiv.style.width = '100%';
-    tempDiv.style.background = 'white';
-    tempDiv.style.opacity = '0';
-    tempDiv.style.pointerEvents = 'none';
-    tempDiv.style.zIndex = '-1';
-    document.body.appendChild(tempDiv);
-    tempDiv.innerHTML = generatePdfHtml();
-    
-    // Даём время на отрисовку
-    await new Promise(r => setTimeout(r, 200));
-    
-    try {
-      const opt = {
-        margin: [0.5, 0.5, 0.5, 0.5],
-        filename: `ПР_Хейхэ_Дент_${(document.getElementById('patientName').value.trim() || 'Пациент').replace(/\s/g, '_')}_${new Date().toLocaleDateString('ru-RU')}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-      };
-      await html2pdf().set(opt).from(tempDiv).save();
-    } catch(e) {
-      console.error(e);
-      alert('Ошибка при создании PDF. Подробности в консоли (F12).');
-    } finally {
-      document.body.removeChild(tempDiv);
+    btn.textContent = '⏳ Подготовка документа...';
+
+    const htmlContent = generatePrintHtml();
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Пожалуйста, разрешите всплывающие окна для этого сайта');
       btn.disabled = false;
       btn.textContent = originalText;
+      return;
     }
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    printWindow.focus();
+    printWindow.print();
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 
   bindEvents();
   updatePriceDisplay();
   document.getElementById('resetBtn').addEventListener('click', resetAll);
-  document.getElementById('exportPdfBtn').addEventListener('click', exportToPdf);
+  document.getElementById('printBtn').addEventListener('click', openPrintWindow);
 </script>
 </body>
 </html>
