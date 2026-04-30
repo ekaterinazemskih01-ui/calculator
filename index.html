@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <!-- Разрешаем загрузку скрипта с CDN (CSP) -->
+  <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com;">
+  <title>Хейхэ Дент — Калькулятор лечения</title>
+  <!-- Подключаем html2pdf с CDN (проверенный источник) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #eef5f9;
+      font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+      padding: 2rem 1.5rem 7rem 1.5rem;
+    }
+    .container {
+      max-width: 1300px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 2rem;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background: #1e4663;
+      padding: 1.5rem 2rem;
+      color: white;
+    }
+    .header h1 { font-size: 1.8rem; }
+    .header p { opacity: 0.9; margin-top: 0.3rem; }
+    .content { padding: 2rem; }
+    .service-group {
+      background: #f8fafd;
+      border-radius: 1.2rem;
+      padding: 1.2rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid #dce5ed;
+    }
+    .service-group h3 {
+      color: #1e4663;
+      margin-bottom: 1rem;
+      font-size: 1.25rem;
+      border-left: 4px solid #2c9b7a;
+      padding-left: 0.7rem;
+    }
+    .option {
+      margin-bottom: 0.8rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.8rem;
+    }
+    .option label {
+      width: 260px;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    select, input {
+      padding: 0.4rem 0.8rem;
+      border-radius: 2rem;
+      border: 1px solid #bdd3e4;
+      font-size: 0.9rem;
+      background: white;
+    }
+    input[type="number"] { width: 100px; text-align: center; }
+    .price-tag {
+      background: #e5f2e9;
+      padding: 0.2rem 0.8rem;
+      border-radius: 2rem;
+      font-weight: bold;
+      color: #2c6e4e;
+      font-size: 0.85rem;
+    }
+    .total-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(255,255,255,0.97);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 -4px 15px rgba(0,0,0,0.1);
+      padding: 0.8rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      z-index: 1000;
+      border-top: 1px solid #c7dceb;
+    }
+    .total-amount {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: #1a7f4e;
+    }
+    button {
+      background: #1e4663;
+      color: white;
+      border: none;
+      padding: 0.6rem 1.4rem;
+      border-radius: 3rem;
+      font-weight: bold;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: 0.2s;
+      margin-left: 0.5rem;
+    }
+    button:hover { background: #0e3450; transform: scale(0.97); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .btn-export { background: #2c6e4e; }
+    .btn-export:hover { background: #1f553b; }
+    .photo-preview {
+      margin-top: 0.5rem;
+      max-width: 120px;
+      max-height: 120px;
+      border-radius: 1rem;
+      border: 1px solid #bdd3e4;
+      overflow: hidden;
+    }
+    .photo-preview img { width: 100%; height: auto; display: block; }
+    .pdf-export-container {
+      position: fixed;
+      top: -10000px;
+      left: -10000px;
+      width: 100%;
+      background: white;
+      z-index: -1;
+      pointer-events: none;
+      height: auto;
+      overflow: visible;
+    }
+    @media (max-width: 700px) {
+      .total-bar { flex-direction: column; gap: 0.5rem; text-align: center; }
+      .option label { width: 100%; }
+      body { padding-bottom: 9rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>ХЕЙХЕ ДЕНТ @heihe_dent</h1>
+    <p>«Обрети улыбку за ОДНУ поездку!» — стоматологические туры в Китай</p>
+  </div>
+  <div class="content">
+    <div class="service-group">
+      <h3>Данные пациента (для документа)</h3>
+      <div class="option"><label>ФИО пациента:</label><input type="text" id="patientName" placeholder="Введите ФИО"></div>
+      <div class="option"><label>Возраст:</label><input type="number" id="patientAge" placeholder="0-120" min="0" max="120" step="1"></div>
+      <div class="option"><label>Телефон:</label><input type="text" id="patientPhone" placeholder="+7 ..."></div>
+      <div class="option"><label>Фото пациента:</label><input type="file" id="patientPhoto" accept="image/*"></div>
+      <div class="photo-preview" id="photoPreview"></div>
+    </div>
+    <div class="service-group">
+      <h3>Дополнительные изображения (рентген, схема зубов)</h3>
+      <div class="option"><label>Изображение 1:</label><input type="file" id="extraImage1" accept="image/*"></div>
+      <div class="photo-preview" id="extraPreview1"></div>
+      <div class="option"><label>Изображение 2:</label><input type="file" id="extraImage2" accept="image/*"></div>
+      <div class="photo-preview" id="extraPreview2"></div>
+    </div>
+    <div class="service-group">
+      <h3>Основные параметры лечения</h3>
+      <div class="option"><label>Количество коронок (штук):</label><input type="number" id="crownsQty" min="0" max="32" value="0" step="1"></div>
+      <div class="option">
+        <label>Выбор материала и страны (цена за 1 шт):</label>
+        <select id="crownMaterialSelect">
+          <option value="3000">Титан (Китай) — 3 000 ₽</option>
+          <option value="3200">Титан (Япония) — 3 200 ₽</option>
+          <option value="3600">Титан (Германия) — 3 600 ₽</option>
+          <option value="4000">Титан (Корея) — 4 000 ₽</option>
+          <option value="4200">Co-Cr (Китай) — 4 200 ₽</option>
+          <option value="4800">Co-Cr (Япония) — 4 800 ₽</option>
+          <option value="5600">Co-Cr (Германия) — 5 600 ₽</option>
+          <option value="6800">Co-Cr (Корея) — 6 800 ₽</option>
+          <option value="8900">Цирконий бюджет (Китай) — 8 900 ₽</option>
+          <option value="9800">Цирконий бюджет (Япония) — 9 800 ₽</option>
+          <option value="10080">Цирконий бюджет (Германия) — 10 080 ₽</option>
+          <option value="11000">Цирконий бюджет (Корея) — 11 000 ₽</option>
+          <option value="12000">Цирконий премиум (Китай) — 12 000 ₽</option>
+          <option value="13000">Цирконий премиум (Япония) — 13 000 ₽</option>
+          <option value="15000">Цирконий премиум (Германия) — 15 000 ₽</option>
+          <option value="18000">Цирконий премиум (Корея) — 18 000 ₽</option>
+        </select>
+        <span class="price-tag" id="selectedPriceDisplay">3 000 ₽/шт</span>
+      </div>
+    </div>
+    <div class="service-group">
+      <h3>Съёмное протезирование</h3>
+      <div class="option"><label>Тип съёмного протеза:</label>
+        <select id="removableType">
+          <option value="none">Не выбран</option>
+          <option value="25000">Временный съемный протез (при имплантации) — 25 000 ₽</option>
+          <option value="35000">Съемный протез с металлическим армированием — 35 000 ₽</option>
+          <option value="45000">Съемный протез НЕЙЛОН — 45 000 ₽</option>
+          <option value="45000_plate">Съемный протез с металлической пластиной — 45 000 ₽</option>
+          <option value="68000">Бюгельный съемный протез с замками — 68 000 ₽</option>
+          <option value="85000">Съемный протез Acry-Free — 85 000 ₽</option>
+          <option value="120000">Съемный протез Pekka — 120 000 ₽</option>
+        </select>
+      </div>
+      <div class="option"><label>Количество съёмных протезов:</label><input type="number" id="removableQty" min="0" max="5" value="0" step="1"></div>
+    </div>
+    <div class="service-group">
+      <h3>Терапия / Хирургия / Лечение</h3>
+      <div class="option"><label>Пломба малая (1 000 ₽):</label><input type="number" id="fillingSmall" min="0" max="20" value="0" step="1"></div>
+      <div class="option"><label>Пломба средняя (2 000 ₽):</label><input type="number" id="fillingMid" min="0" max="20" value="0" step="1"></div>
+      <div class="option"><label>Пломба большая (3 000 ₽):</label><input type="number" id="fillingLarge" min="0" max="20" value="0" step="1"></div>
+      <div class="option"><label>Удаление зуба (3 000 ₽):</label><input type="number" id="extractionQty" min="0" max="20" value="0" step="1"></div>
+      <div class="option"><label>Удаление камня (2 500 ₽):</label><input type="number" id="scalingQty" min="0" max="5" value="0" step="1"></div>
+      <div class="option"><label>Установка штифта (3 000 ₽):</label><input type="number" id="postQty" min="0" max="10" value="0" step="1"></div>
+      <div class="option"><label>Инфузионная терапия (4 500 ₽):</label><input type="number" id="infusionQty" min="0" max="2" value="0" step="1"></div>
+    </div>
+    <div class="service-group">
+      <h3>Имплантация (под ключ с коронкой)</h3>
+      <div class="option"><label>Dentium + металлокерамика (45 000 ₽):</label><input type="number" id="dentiumSingle" min="0" max="10" value="0" step="1"></div>
+      <div class="option"><label>Osstem (54 000 ₽):</label><input type="number" id="osstemQty" min="0" max="10" value="0" step="1"></div>
+      <div class="option"><label>All-on-4 Co-Cr (430 000 ₽):</label><input type="number" id="allon4CoCr" min="0" max="1" value="0" step="1"></div>
+      <div class="option"><label>All-on-6 Co-Cr (520 000 ₽):</label><input type="number" id="allon6CoCr" min="0" max="1" value="0" step="1"></div>
+      <div class="option"><label>All-on-4 Zr (460 000 ₽):</label><input type="number" id="allon4Zr" min="0" max="1" value="0" step="1"></div>
+      <div class="option"><label>All-on-6 Zr (550 000 ₽):</label><input type="number" id="allon6Zr" min="0" max="1" value="0" step="1"></div>
+    </div>
+    <div class="service-group">
+      <h3>Импортные имплантаты (цена в юанях)</h3>
+      <div class="option"><label>Straumann (3 800 ¥ ≈45 600 ₽):</label><input type="number" id="straumannQty" min="0" max="10" value="0" step="1"></div>
+      <div class="option"><label>Nobel Biocare (4 000 ¥ ≈48 000 ₽):</label><input type="number" id="nobelQty" min="0" max="10" value="0" step="1"></div>
+      <div class="option"><label>Dentsply Sirona (4 200 ¥ ≈50 400 ₽):</label><input type="number" id="dentsplyQty" min="0" max="10" value="0" step="1"></div>
+    </div>
+    <div class="service-group">
+      <h3>Эстетика / Профилактика</h3>
+      <div class="option"><label>Виниры Япония (15 000 ₽):</label><input type="number" id="veneerJapan" min="0" max="20" value="0" step="1"></div>
+      <div class="option"><label>Виниры Германия (18 000 ₽):</label><input type="number" id="veneerGermany" min="0" max="20" value="0" step="1"></div>
+      <div class="option"><label>Виниры Корея (24 000 ₽):</label><input type="number" id="veneerKorea" min="0" max="20" value="0" step="1"></div>
+      <div class="option"><label>Профгигиена (4 000 ₽):</label><input type="number" id="hygieneQty" min="0" max="5" value="0" step="1"></div>
+      <div class="option"><label>Отбеливание (12 000 ₽):</label><input type="number" id="whiteningQty" min="0" max="2" value="0" step="1"></div>
+    </div>
+    <div style="margin-top: 1rem; text-align: right; font-size: 1.2rem;">
+      <strong>Предварительная сумма (выбранный вариант):</strong> <span id="liveTotal">0</span> ₽
+    </div>
+  </div>
+</div>
+<div class="total-bar">
+  <span>ИТОГО ПО ВЫБРАННОМУ ВАРИАНТУ:</span>
+  <span class="total-amount" id="fixedTotal">0 ₽</span>
+  <div>
+    <button id="resetBtn">Сбросить всё</button>
+    <button id="exportPdfBtn" class="btn-export">📄 Сохранить как PDF</button>
+  </div>
+</div>
+<div id="pdfContainer" class="pdf-export-container"></div>
+
+<script>
+  let photoDataUrl = '';
+  let extra1DataUrl = '';
+  let extra2DataUrl = '';
+
+  function previewImage(fileInput, previewElement, setDataUrlFunc) {
+    const file = fileInput.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        setDataUrlFunc(e.target.result);
+        previewElement.innerHTML = `<img src="${e.target.result}" alt="Превью">`;
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+  document.getElementById('patientPhoto').addEventListener('change', function(e) {
+    previewImage(e.target, document.getElementById('photoPreview'), (url) => photoDataUrl = url);
+  });
+  document.getElementById('extraImage1').addEventListener('change', function(e) {
+    previewImage(e.target, document.getElementById('extraPreview1'), (url) => extra1DataUrl = url);
+  });
+  document.getElementById('extraImage2').addEventListener('change', function(e) {
+    previewImage(e.target, document.getElementById('extraPreview2'), (url) => extra2DataUrl = url);
+  });
+
+  function getSelectedCrownPrice() { return parseInt(document.getElementById('crownMaterialSelect').value); }
+  function getRemovablePrice() {
+    let val = document.getElementById('removableType').value;
+    if (val === 'none') return 0;
+    if (val === '45000_plate') return 45000;
+    return parseInt(val);
+  }
+  function getRemovableName() {
+    let select = document.getElementById('removableType');
+    let text = select.options[select.selectedIndex].text;
+    return select.value === 'none' ? '' : text.split('—')[0].trim();
+  }
+  function getRemovableQty() { return parseInt(document.getElementById('removableQty').value) || 0; }
+  function getSelectedCrownName() {
+    let text = document.getElementById('crownMaterialSelect').options[document.getElementById('crownMaterialSelect').selectedIndex].text;
+    return text.split('—')[0].trim();
+  }
+  function getSelectedCrownPriceForDisplay() { return getSelectedCrownPrice(); }
+  function isImplantSelected() {
+    let ids = ['dentiumSingle','osstemQty','allon4CoCr','allon6CoCr','allon4Zr','allon6Zr','straumannQty','nobelQty','dentsplyQty'];
+    return ids.some(id => (parseInt(document.getElementById(id).value) || 0) > 0);
+  }
+
+  function calculateTotal() {
+    let total = 0;
+    total += (parseInt(document.getElementById('crownsQty').value)||0) * getSelectedCrownPrice();
+    total += getRemovablePrice() * getRemovableQty();
+    total += (parseInt(document.getElementById('fillingSmall').value)||0)*1000;
+    total += (parseInt(document.getElementById('fillingMid').value)||0)*2000;
+    total += (parseInt(document.getElementById('fillingLarge').value)||0)*3000;
+    total += (parseInt(document.getElementById('extractionQty').value)||0)*3000;
+    total += (parseInt(document.getElementById('scalingQty').value)||0)*2500;
+    total += (parseInt(document.getElementById('postQty').value)||0)*3000;
+    total += (parseInt(document.getElementById('infusionQty').value)||0)*4500;
+    total += (parseInt(document.getElementById('dentiumSingle').value)||0)*45000;
+    total += (parseInt(document.getElementById('osstemQty').value)||0)*54000;
+    total += (parseInt(document.getElementById('allon4CoCr').value)||0)*430000;
+    total += (parseInt(document.getElementById('allon6CoCr').value)||0)*520000;
+    total += (parseInt(document.getElementById('allon4Zr').value)||0)*460000;
+    total += (parseInt(document.getElementById('allon6Zr').value)||0)*550000;
+    const yuanRate=12;
+    total += (parseInt(document.getElementById('straumannQty').value)||0)*3800*yuanRate;
+    total += (parseInt(document.getElementById('nobelQty').value)||0)*4000*yuanRate;
+    total += (parseInt(document.getElementById('dentsplyQty').value)||0)*4200*yuanRate;
+    total += (parseInt(document.getElementById('veneerJapan').value)||0)*15000;
+    total += (parseInt(document.getElementById('veneerGermany').value)||0)*18000;
+    total += (parseInt(document.getElementById('veneerKorea').value)||0)*24000;
+    total += (parseInt(document.getElementById('hygieneQty').value)||0)*4000;
+    total += (parseInt(document.getElementById('whiteningQty').value)||0)*12000;
+    let formatted = total.toLocaleString('ru-RU');
+    document.getElementById('liveTotal').innerText = formatted;
+    document.getElementById('fixedTotal').innerText = formatted + ' ₽';
+    return total;
+  }
+  function updatePriceDisplay() {
+    document.getElementById('selectedPriceDisplay').innerText = getSelectedCrownPrice().toLocaleString('ru-RU') + ' ₽/шт';
+    calculateTotal();
+  }
+  function bindEvents() {
+    document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', calculateTotal));
+    document.getElementById('crownMaterialSelect').addEventListener('change', updatePriceDisplay);
+  }
+  function resetAll() {
+    document.querySelectorAll('input[type="number"]').forEach(i => i.value='0');
+    document.getElementById('crownsQty').value='0';
+    document.getElementById('removableType').value='none';
+    document.getElementById('removableQty').value='0';
+    document.getElementById('crownMaterialSelect').value='3000';
+    document.getElementById('patientName').value='';
+    document.getElementById('patientAge').value='';
+    document.getElementById('patientPhone').value='';
+    document.getElementById('patientPhoto').value='';
+    document.getElementById('extraImage1').value='';
+    document.getElementById('extraImage2').value='';
+    photoDataUrl=''; extra1DataUrl=''; extra2DataUrl='';
+    document.getElementById('photoPreview').innerHTML='';
+    document.getElementById('extraPreview1').innerHTML='';
+    document.getElementById('extraPreview2').innerHTML='';
+    updatePriceDisplay();
+  }
+
+  function generatePdfHtml() {
+    let patientName = document.getElementById('patientName').value || '_________________';
+    let patientAge = document.getElementById('patientAge').value || '___';
+    let patientPhone = document.getElementById('patientPhone').value || '_________________';
+    let crownsQty = parseInt(document.getElementById('crownsQty').value) || 0;
+    let removablePrice = getRemovablePrice();
+    let removableName = getRemovableName();
+    let removableQty = getRemovableQty();
+    let removableCost = removablePrice * removableQty;
+    let otherCosts = 0;
+    otherCosts += (parseInt(document.getElementById('fillingSmall').value)||0)*1000;
+    otherCosts += (parseInt(document.getElementById('fillingMid').value)||0)*2000;
+    otherCosts += (parseInt(document.getElementById('fillingLarge').value)||0)*3000;
+    otherCosts += (parseInt(document.getElementById('extractionQty').value)||0)*3000;
+    otherCosts += (parseInt(document.getElementById('scalingQty').value)||0)*2500;
+    otherCosts += (parseInt(document.getElementById('postQty').value)||0)*3000;
+    otherCosts += (parseInt(document.getElementById('infusionQty').value)||0)*4500;
+    otherCosts += (parseInt(document.getElementById('dentiumSingle').value)||0)*45000;
+    otherCosts += (parseInt(document.getElementById('osstemQty').value)||0)*54000;
+    otherCosts += (parseInt(document.getElementById('allon4CoCr').value)||0)*430000;
+    otherCosts += (parseInt(document.getElementById('allon6CoCr').value)||0)*520000;
+    otherCosts += (parseInt(document.getElementById('allon4Zr').value)||0)*460000;
+    otherCosts += (parseInt(document.getElementById('allon6Zr').value)||0)*550000;
+    const yuanRate=12;
+    otherCosts += (parseInt(document.getElementById('straumannQty').value)||0)*3800*yuanRate;
+    otherCosts += (parseInt(document.getElementById('nobelQty').value)||0)*4000*yuanRate;
+    otherCosts += (parseInt(document.getElementById('dentsplyQty').value)||0)*4200*yuanRate;
+    otherCosts += (parseInt(document.getElementById('veneerJapan').value)||0)*15000;
+    otherCosts += (parseInt(document.getElementById('veneerGermany').value)||0)*18000;
+    otherCosts += (parseInt(document.getElementById('veneerKorea').value)||0)*24000;
+    otherCosts += (parseInt(document.getElementById('hygieneQty').value)||0)*4000;
+    otherCosts += (parseInt(document.getElementById('whiteningQty').value)||0)*12000;
+
+    const variants = [
+      { name:"Титан (Китай)", price:3000 }, { name:"Титан (Япония)", price:3200 },
+      { name:"Титан (Германия)", price:3600 }, { name:"Титан (Корея)", price:4000 },
+      { name:"Co-Cr (Китай)", price:4200 }, { name:"Co-Cr (Япония)", price:4800 },
+      { name:"Co-Cr (Германия)", price:5600 }, { name:"Co-Cr (Корея)", price:6800 },
+      { name:"Цирконий бюджет (Китай)", price:8900 }, { name:"Цирконий бюджет (Япония)", price:9800 },
+      { name:"Цирконий бюджет (Германия)", price:10080 }, { name:"Цирконий бюджет (Корея)", price:11000 },
+      { name:"Цирконий премиум (Китай)", price:12000 }, { name:"Цирконий премиум (Япония)", price:13000 },
+      { name:"Цирконий премиум (Германия)", price:15000 }, { name:"Цирконий премиум (Корея)", price:18000 }
+    ];
+    let variantsHtml = '';
+    for(let v of variants) {
+      let crownCost = crownsQty * v.price;
+      let total = crownCost + removableCost + otherCosts;
+      variantsHtml += `<tr><td style="font-weight:bold;">${v.name}</td><td style="text-align:center">${crownsQty}</td><td style="text-align:right">${v.price.toLocaleString('ru-RU')} ₽</td><td style="text-align:right">${crownCost.toLocaleString('ru-RU')} ₽</td><td style="text-align:right"><strong>${total.toLocaleString('ru-RU')} ₽</strong></td></tr>`;
+    }
+    let additionalRow = '';
+    if(removableQty>0 || isImplantSelected()) {
+      let services=[];
+      if(removableQty>0) services.push(`Съёмный протез: ${removableName} (${removableQty} шт)`);
+      if(isImplantSelected()) services.push('Имплантация (выбрана)');
+      additionalRow = `<p><strong>Дополнительные услуги:</strong> ${services.join('; ')}</p>`;
+    }
+    const additionalInfo = `
+      <div style="margin-top: 30px;">
+        <h3>📌 Общее заключение</h3>
+        <p>По приезду необходим рентген-снимок для исключения воспалений или кист в корневой зоне. При выявлении болезней назначается соответствующее лечение.</p>
+        <h3>🦷 Материалы для протезирования</h3>
+        <p><strong>Кобальт-хромовый сплав</strong> — высокая прочность, доступная стоимость, долговечность 12–15 лет.<br>
+        <strong>Диоксид циркония</strong> — биосовместимость, эстетика, срок службы до 30 лет. Бюджетный и премиум класс.</p>
+        <h3>🔩 Имплантация</h3>
+        <p>Osstem, Dentium, All-on-4/6 — быстрое восстановление жевательной функции, часто без костной пластики.</p>
+        <h3>🦷 Съёмные протезы</h3>
+        <p>Acry-Free — гипоаллергенный, гибкий, не окрашивается, без металлических крючков.</p>
+        <h3>🎨 Выбор оттенка зубов</h3>
+        <ul><li>Соответствие цвету соседних зубов</li><li>Соответствие цвету кожи и волос</li><li>Учёт возраста</li></ul>
+        <h3>📅 Этапы лечения</h3>
+        <ul><li>День 1: консультация, рентген, подготовка, снятие слепков</li><li>Дни 2–4: примерка, фиксация</li><li>Дни 5–6: установка готовых конструкций, рекомендации</li></ul>
+        <h3>💰 Оплата и гарантия</h3>
+        <p>Оплата рублями наличными или переводом. Выдаётся именная гарантийная карта. Рентген и препарирование — без оплаты.</p>
+      </div>
+    `;
+    return `<!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><title>План лечения Хейхэ Дент</title>
+    <style>
+      body { font-family: 'Times New Roman', Arial, sans-serif; margin: 2rem; font-size: 12pt; background: white; line-height: 1.4; }
+      .header { text-align: center; border-bottom: 2px solid #1e4663; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+      .clinic-name { font-size: 1.8rem; font-weight: bold; color: #1e4663; }
+      .contacts { font-size: 0.9rem; color: #555; }
+      h2 { color: #1e4663; margin-top: 1.5rem; }
+      h3 { color: #2c6e4e; margin-top: 1.2rem; margin-bottom: 0.5rem; }
+      table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+      th, td { border: 1px solid #9bb7d0; padding: 8px 12px; vertical-align: top; }
+      th { background: #eef2fa; }
+      .signature { margin-top: 2rem; border-top: 1px solid #aaa; padding-top: 1rem; }
+      .patient-photo img { max-width: 150px; border-radius: 1rem; border: 1px solid #ddd; }
+      .extra-images img { max-width: 280px; display: inline-block; margin-right: 10px; margin-bottom: 10px; border: 1px solid #ccc; }
+      ul, ol { margin-left: 1.5rem; margin-bottom: 0.8rem; }
+    </style>
+    </head>
+    <body>
+      <div class="header">
+        <div class="clinic-name">ХЕЙХЕ ДЕНТ @heihe_dent</div>
+        <div class="contacts">«Обрети улыбку за ОДНУ поездку!» Стоматологические туры в Китай<br>
+        Тел: +7 (914) 227-09-25, +7 (914) 278-08-26, +7 (924) 164-54-68<br>
+        Email: heihe_dent@mail.ru | Сайт: https://heihe-prodent.ru/</div>
+      </div>
+      <h2>ПЛАН ЛЕЧЕНИЯ И СТОИМОСТЬ</h2>
+      <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:20px;">
+        <div><p><strong>Пациент:</strong> ${patientName}<br><strong>Возраст:</strong> ${patientAge}<br><strong>Телефон:</strong> ${patientPhone}<br><strong>Дата составления:</strong> ${new Date().toLocaleDateString('ru-RU')}</p></div>
+        <div class="patient-photo">${photoDataUrl ? `<img src="${photoDataUrl}" alt="Фото пациента">` : ''}</div>
+      </div>
+      <div class="extra-images">${extra1DataUrl ? `<img src="${extra1DataUrl}" alt="Доп. изображение 1">` : ''}${extra2DataUrl ? `<img src="${extra2DataUrl}" alt="Доп. изображение 2">` : ''}</div>
+      <p><strong>Количество коронок:</strong> ${crownsQty}</p>
+      <p><strong>Выбранный материал:</strong> ${getSelectedCrownName()} — ${getSelectedCrownPriceForDisplay().toLocaleString('ru-RU')} ₽/шт</p>
+      ${additionalRow}
+      <h3>РАСЧЁТ ПО ВСЕМ ВАРИАНТАМ МАТЕРИАЛОВ</h3>
+      <table><thead><tr><th>Материал</th><th>Кол-во</th><th>Цена за ед.</th><th>Стоимость коронок</th><th>ОБЩАЯ СТОИМОСТЬ</th></tr></thead><tbody>${variantsHtml}</tbody></table>
+      ${additionalInfo}
+      <div class="signature">Врач-стоматолог / Координатор «Хейхэ Дент»<br>М.П.</div>
+      <p style="font-size:0.7rem;">Документ сформирован автоматически. Окончательная стоимость уточняется после очного осмотра.</p>
+    </body>
+    </html>`;
+  }
+
+  async function exportToPdf() {
+    const btn = document.getElementById('exportPdfBtn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Создание PDF...';
+    const container = document.getElementById('pdfContainer');
+    container.innerHTML = generatePdfHtml();
+    await new Promise(r => setTimeout(r, 200));
+    try {
+      const opt = {
+        margin: [0.5,0.5,0.5,0.5],
+        filename: `ПР_Хейхэ_Дент_${(document.getElementById('patientName').value.trim() || 'Пациент').replace(/\s/g, '_')}_${new Date().toLocaleDateString('ru-RU')}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+      };
+      await html2pdf().set(opt).from(container).save();
+    } catch(e) {
+      console.error(e);
+      alert('Ошибка при создании PDF. Проверьте консоль (F12).');
+    } finally {
+      container.innerHTML = '';
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+
+  bindEvents();
+  updatePriceDisplay();
+  document.getElementById('resetBtn').addEventListener('click', resetAll);
+  document.getElementById('exportPdfBtn').addEventListener('click', exportToPdf);
+</script>
+</body>
+</html>
