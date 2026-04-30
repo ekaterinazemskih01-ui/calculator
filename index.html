@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <!-- Разрешаем загрузку скрипта с CDN (CSP) -->
   <meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://cdnjs.cloudflare.com;">
   <title>Хейхэ Дент — Калькулятор лечения</title>
-  <!-- Подключаем html2pdf с CDN (проверенный источник) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -119,17 +117,6 @@
       overflow: hidden;
     }
     .photo-preview img { width: 100%; height: auto; display: block; }
-    .pdf-export-container {
-      position: fixed;
-      top: -10000px;
-      left: -10000px;
-      width: 100%;
-      background: white;
-      z-index: -1;
-      pointer-events: none;
-      height: auto;
-      overflow: visible;
-    }
     @media (max-width: 700px) {
       .total-bar { flex-direction: column; gap: 0.5rem; text-align: center; }
       .option label { width: 100%; }
@@ -247,7 +234,6 @@
     <button id="exportPdfBtn" class="btn-export">📄 Сохранить как PDF</button>
   </div>
 </div>
-<div id="pdfContainer" class="pdf-export-container"></div>
 
 <script>
   let photoDataUrl = '';
@@ -480,23 +466,37 @@
     const originalText = btn.textContent;
     btn.disabled = true;
     btn.textContent = '⏳ Создание PDF...';
-    const container = document.getElementById('pdfContainer');
-    container.innerHTML = generatePdfHtml();
+    
+    // Создаём временный контейнер в теле документа (визуально прозрачный, но в потоке)
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.top = '0';
+    tempDiv.style.left = '0';
+    tempDiv.style.width = '100%';
+    tempDiv.style.background = 'white';
+    tempDiv.style.opacity = '0';
+    tempDiv.style.pointerEvents = 'none';
+    tempDiv.style.zIndex = '-1';
+    document.body.appendChild(tempDiv);
+    tempDiv.innerHTML = generatePdfHtml();
+    
+    // Даём время на отрисовку
     await new Promise(r => setTimeout(r, 200));
+    
     try {
       const opt = {
-        margin: [0.5,0.5,0.5,0.5],
+        margin: [0.5, 0.5, 0.5, 0.5],
         filename: `ПР_Хейхэ_Дент_${(document.getElementById('patientName').value.trim() || 'Пациент').replace(/\s/g, '_')}_${new Date().toLocaleDateString('ru-RU')}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
         jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
       };
-      await html2pdf().set(opt).from(container).save();
+      await html2pdf().set(opt).from(tempDiv).save();
     } catch(e) {
       console.error(e);
-      alert('Ошибка при создании PDF. Проверьте консоль (F12).');
+      alert('Ошибка при создании PDF. Подробности в консоли (F12).');
     } finally {
-      container.innerHTML = '';
+      document.body.removeChild(tempDiv);
       btn.disabled = false;
       btn.textContent = originalText;
     }
